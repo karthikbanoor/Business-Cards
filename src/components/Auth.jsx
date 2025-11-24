@@ -12,7 +12,12 @@ export default function Auth() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({ email });
+    const { error } = await supabase.auth.signInWithOtp({ 
+      email,
+      options: {
+        emailRedirectTo: window.location.href,
+      }
+    });
     if (error) {
       alert(error.error_description || error.message);
     } else {
