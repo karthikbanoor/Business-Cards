@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import UploadScanner from './UploadScanner';
 import Auth from './Auth';
-import { Building2, Mail, Phone, MapPin, Globe, User, LogOut, Trash2, Plus, ScanLine, Search, LayoutGrid, Moon, Sun } from 'lucide-react';
+import { Building2, Mail, Phone, MapPin, Globe, User, LogOut, Trash2, Plus, ScanLine, Search, LayoutGrid, Moon, Sun, X } from 'lucide-react';
 import ManualEntryForm from './ManualEntryForm';
 import { useTheme } from '../context/ThemeContext';
 
@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedImage, setSelectedImage] = useState(null);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -189,7 +190,10 @@ export default function Dashboard() {
               return (
                 <div key={card.id} className="group bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden hover:border-blue-300 dark:hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-100/50 dark:hover:shadow-blue-900/20 transition-all duration-300 flex flex-col h-full">
                   {/* Card Image Area */}
-                  <div className="relative h-48 bg-slate-100 dark:bg-slate-900 overflow-hidden border-b border-slate-100 dark:border-slate-700 group-hover:h-52 transition-all duration-300">
+                  <div 
+                    className="relative h-48 bg-slate-100 dark:bg-slate-900 overflow-hidden border-b border-slate-100 dark:border-slate-700 group-hover:h-52 transition-all duration-300 cursor-pointer"
+                    onClick={() => card.image_url && setSelectedImage(card.image_url)}
+                  >
                     {card.image_url ? (
                       <img 
                         src={card.image_url} 
@@ -204,9 +208,12 @@ export default function Dashboard() {
                     )}
                     
                     {/* Overlay Actions */}
-                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-200 transform translate-y-2 group-hover:translate-y-0">
+                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-200 transform translate-y-2 group-hover:translate-y-0" onClick={(e) => e.stopPropagation()}>
                        <button 
-                          onClick={() => setDeleteConfirmation(card.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirmation(card.id);
+                          }}
                           className="p-2.5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-all"
                           title="Delete Card"
                         >
@@ -324,6 +331,27 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Image Viewer Modal */}
+      {selectedImage && (
+        <div 
+          className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedImage(null)}
+        >
+          <button 
+            onClick={() => setSelectedImage(null)}
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img 
+            src={selectedImage} 
+            alt="Full size business card" 
+            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()} 
+          />
         </div>
       )}
     </div>
