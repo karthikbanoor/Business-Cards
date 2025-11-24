@@ -114,7 +114,7 @@ export default function UploadScanner({ onScanComplete }) {
         .from('business_cards')
         .insert({
           organization_id: profile.organization_id,
-          image_url: 'https://placehold.co/600x400?text=Business+Card', // Placeholder for MVP
+          image_url: preview, // Save the actual image (base64)
           extracted_data: scannedData
         });
 
