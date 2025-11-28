@@ -14,6 +14,7 @@ export default function EditCardForm({ card, onClose, onUpdateComplete }) {
     Address: ''
   });
   const [notes, setNotes] = useState('');
+  const [tags, setTags] = useState('');
 
   useEffect(() => {
     if (card) {
@@ -27,6 +28,7 @@ export default function EditCardForm({ card, onClose, onUpdateComplete }) {
         Address: card.extracted_data.Address || ''
       });
       setNotes(card.notes || '');
+      setTags(card.tags ? card.tags.join(', ') : '');
     }
   }, [card]);
 
@@ -43,7 +45,8 @@ export default function EditCardForm({ card, onClose, onUpdateComplete }) {
         .from('business_cards')
         .update({
           extracted_data: formData,
-          notes: notes
+          notes: notes,
+          tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : []
         })
         .eq('id', card.id);
 
@@ -160,6 +163,17 @@ export default function EditCardForm({ card, onClose, onUpdateComplete }) {
                 rows="3"
                 className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 transition-all resize-none placeholder-slate-400"
                 placeholder="Add private notes about this contact..."
+                />
+            </div>
+
+            <div className="col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tags (comma separated)</label>
+                <input
+                type="text"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 transition-all placeholder-slate-400"
+                placeholder="Client, Tech, 2024 Event"
                 />
             </div>
           </div>

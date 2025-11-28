@@ -16,7 +16,8 @@ export default function ManualEntryForm({ onClose, onSaveComplete }) {
     Phone: '',
     Website: '',
     Address: '',
-    notes: ''
+    notes: '',
+    tags: ''
   });
 
   const handleChange = (e) => {
@@ -137,7 +138,8 @@ export default function ManualEntryForm({ onClose, onSaveComplete }) {
               ...formData,
               notes: undefined // Don't store notes in extracted_data
             },
-            notes: formData.notes
+            notes: formData.notes,
+            tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : []
           }
         ]);
 
@@ -305,6 +307,18 @@ export default function ManualEntryForm({ onClose, onSaveComplete }) {
                 rows="3"
                 className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 transition-all resize-none placeholder-slate-400"
                 placeholder="Add private notes about this contact..."
+                />
+            </div>
+
+            <div className="col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tags (comma separated)</label>
+                <input
+                type="text"
+                name="tags"
+                value={formData.tags}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 transition-all placeholder-slate-400"
+                placeholder="Client, Tech, 2024 Event"
                 />
             </div>
           </div>

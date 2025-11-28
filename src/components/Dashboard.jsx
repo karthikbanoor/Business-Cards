@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import UploadScanner from './UploadScanner';
 import Auth from './Auth';
-import { Building2, Mail, Phone, MapPin, Globe, User, LogOut, Trash2, Plus, ScanLine, Search, LayoutGrid, Moon, Sun, X } from 'lucide-react';
+import { Building2, Mail, Phone, MapPin, Globe, User, LogOut, Trash2, Plus, ScanLine, Search, LayoutGrid, Moon, Sun, X, Linkedin, Calendar, List, Tag } from 'lucide-react';
 import ManualEntryForm from './ManualEntryForm';
 import EditCardForm from './EditCardForm';
+import ExportButton from './ExportButton';
+import QRCodeGenerator from './QRCodeGenerator';
 import { useTheme } from '../context/ThemeContext';
 
 export default function Dashboard() {
@@ -16,6 +18,10 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [editingCard, setEditingCard] = useState(null);
+  const [showQRCode, setShowQRCode] = useState(null);
+  const [viewMode, setViewMode] = useState('grid');
+  const [allTags, setAllTags] = useState([]);
+  const [selectedTag, setSelectedTag] = useState(null);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -47,7 +53,17 @@ export default function Dashboard() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+
       setCards(data || []);
+      
+      // Extract unique tags
+      const tags = new Set();
+      (data || []).forEach(card => {
+        if (card.tags && Array.isArray(card.tags)) {
+          card.tags.forEach(tag => tags.add(tag));
+        }
+      });
+      setAllTags(Array.from(tags).sort());
     } catch (error) {
       console.error('Error fetching cards:', error);
     } finally {
@@ -98,12 +114,17 @@ export default function Dashboard() {
   };
 
   const filteredCards = cards.filter(card => {
+    if (selectedTag) {
+        if (!card.tags || !card.tags.includes(selectedTag)) return false;
+    }
+
     const data = card.extracted_data;
     const search = searchTerm.toLowerCase();
     return (
-      data.Name?.toLowerCase().includes(search) ||
-      data["Company Name"]?.toLowerCase().includes(search) ||
-      data["Job Title"]?.toLowerCase().includes(search)
+      (data.Name && data.Name.toLowerCase().includes(search)) ||
+      (data["Company Name"] && data["Company Name"].toLowerCase().includes(search)) ||
+      (data["Job Title"] && data["Job Title"].toLowerCase().includes(search)) ||
+      (card.tags && card.tags.some(tag => tag.toLowerCase().includes(search)))
     );
   });
 
@@ -183,8 +204,24 @@ export default function Dashboard() {
         {/* Toolbar */}
         <div className="sticky top-20 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm py-4 -mx-4 px-4 sm:mx-0 sm:px-0 flex flex-col sm:flex-row justify-between items-center gap-4 border-b border-slate-200/60 dark:border-slate-800/60 sm:border-none transition-colors duration-300">
           <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-semibold text-lg">
-            <LayoutGrid className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            <h3>My Cards <span className="text-slate-400 dark:text-slate-500 font-normal ml-1">({filteredCards.length})</span></h3>
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                <button 
+                    onClick={() => setViewMode('grid')}
+                    className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                    title="Grid View"
+                >
+                    <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button 
+                    onClick={() => setViewMode('list')}
+                    className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                    title="List View"
+                >
+                    <List className="w-4 h-4" />
+                </button>
+            </div>
+            <span className="hidden sm:inline">My Cards</span> 
+            <span className="text-slate-400 dark:text-slate-500 font-normal text-sm">({filteredCards.length})</span>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -208,11 +245,77 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Cards Grid */}
+        {/* Tags Filter */}
+        {allTags.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">
+                <button
+                    onClick={() => setSelectedTag(null)}
+                    className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
+                        selectedTag === null 
+                            ? 'bg-blue-600 text-white border-blue-600' 
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500'
+                    }`}
+                >
+                    All
+                </button>
+                {allTags.map(tag => (
+                    <button
+                        key={tag}
+                        onClick={() => setSelectedTag(tag)}
+                        className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
+                            selectedTag === tag 
+                                ? 'bg-blue-600 text-white border-blue-600' 
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500'
+                        }`}
+                    >
+                        {tag}
+                    </button>
+                ))}
+            </div>
+        )}
+
+        {/* Cards Grid/List */}
         {filteredCards.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-12">
+          <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-12" : "space-y-4 pb-12"}>
             {filteredCards.map((card) => {
               const data = card.extracted_data;
+              
+              if (viewMode === 'list') {
+                  return (
+                    <div key={card.id} className="group bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden hover:border-blue-300 dark:hover:border-blue-500/50 hover:shadow-md transition-all duration-200 flex items-center p-4 gap-4">
+                        {/* List View Image */}
+                        <div 
+                            className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden shrink-0 cursor-pointer border border-slate-100 dark:border-slate-700"
+                            onClick={() => card.image_url && setSelectedImage(card.image_url)}
+                        >
+                            {card.image_url ? (
+                                <img src={card.image_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                                <User className="w-6 h-6 m-auto mt-3 text-slate-300" />
+                            )}
+                        </div>
+
+                        {/* List View Content */}
+                        <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-center">
+                            <div>
+                                <h3 className="font-bold text-slate-900 dark:text-white truncate">{data.Name || 'Unknown'}</h3>
+                                <p className="text-xs text-blue-600 dark:text-blue-400 truncate">{data["Job Title"]}</p>
+                            </div>
+                            <div className="hidden sm:block">
+                                <p className="text-sm text-slate-600 dark:text-slate-400 truncate">{data["Company Name"]}</p>
+                            </div>
+                            <div className="hidden md:block">
+                                <p className="text-sm text-slate-500 truncate">{data.Email}</p>
+                            </div>
+                            <div className="flex items-center justify-end gap-2">
+                                <button onClick={() => setEditingCard(card)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-blue-600 transition-colors"><Plus className="w-4 h-4 rotate-45" /></button>
+                                <ExportButton card={card} />
+                            </div>
+                        </div>
+                    </div>
+                  );
+              }
+
               return (
                 <div key={card.id} className="group bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden hover:border-blue-300 dark:hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-100/50 dark:hover:shadow-blue-900/20 transition-all duration-300 flex flex-col h-full">
                   {/* Card Image Area */}
@@ -264,13 +367,42 @@ export default function Dashboard() {
                             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                         </svg>
                     </button>
+
+                    {/* QR Code Button */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setShowQRCode(card);
+                        }}
+                        className="absolute bottom-3 right-3 p-2 bg-white/30 text-white hover:bg-white/50 rounded-full backdrop-blur-sm transition-all duration-200 opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0"
+                        title="Share via QR Code"
+                    >
+                        <ScanLine className="w-5 h-5" />
+                    </button>
                   </div>
 
-                  {/* Card Content */}
-                  <div className="p-6 flex-1 flex flex-col">
+                    <div className="p-6 flex-1 flex flex-col">
                     <div className="mb-5">
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white line-clamp-1">{data.Name || 'Unknown Name'}</h3>
-                      <p className="text-blue-600 dark:text-blue-400 font-medium text-sm line-clamp-1">{data["Job Title"]}</p>
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white line-clamp-1">{data.Name || 'Unknown Name'}</h3>
+                            <p className="text-blue-600 dark:text-blue-400 font-medium text-sm line-clamp-1">{data["Job Title"]}</p>
+                        </div>
+                        {card.tags && card.tags.length > 0 && (
+                            <div className="flex flex-wrap justify-end gap-1 max-w-[40%]">
+                                {card.tags.slice(0, 2).map(tag => (
+                                    <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-md truncate max-w-full">
+                                        {tag}
+                                    </span>
+                                ))}
+                                {card.tags.length > 2 && (
+                                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-md">
+                                        +{card.tags.length - 2}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="space-y-3 text-sm text-slate-600 dark:text-slate-400 flex-1">
@@ -313,7 +445,14 @@ export default function Dashboard() {
                           <div className="p-1.5 bg-slate-50 dark:bg-slate-700/50 rounded-lg text-slate-500 dark:text-slate-400 group-hover/item:bg-blue-50 dark:group-hover/item:bg-blue-900/20 group-hover/item:text-blue-600 dark:group-hover/item:text-blue-400 transition-colors shrink-0 mt-0.5">
                             <MapPin className="w-3.5 h-3.5" />
                           </div>
-                          <span className="line-clamp-2 text-xs leading-relaxed">{data.Address}</span>
+                          <a 
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.Address)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="line-clamp-2 text-xs leading-relaxed hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                          >
+                            {data.Address}
+                          </a>
                         </div>
                       )}
                     </div>
@@ -327,12 +466,33 @@ export default function Dashboard() {
                                 </p>
                             )}
                         </div>
-                        <button
-                            onClick={() => setEditingCard(card)}
-                            className="px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg transition-colors"
-                        >
-                            Edit
-                        </button>
+                        <div className="flex gap-2">
+                            <a
+                                href={`https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(`${data.Name} ${data["Company Name"] || ''}`)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-2 text-slate-400 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                title="Search on LinkedIn"
+                            >
+                                <Linkedin className="w-4 h-4" />
+                            </a>
+                            <a
+                                href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Meeting with ${encodeURIComponent(data.Name)}&details=Follow up with ${encodeURIComponent(data.Name)} from ${encodeURIComponent(data["Company Name"] || '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                title="Schedule Follow-up"
+                            >
+                                <Calendar className="w-4 h-4" />
+                            </a>
+                            <ExportButton card={card} />
+                            <button
+                                onClick={() => setEditingCard(card)}
+                                className="px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg transition-colors"
+                            >
+                                Edit
+                            </button>
+                        </div>
                     </div>
                   </div>
                 </div>
@@ -374,6 +534,14 @@ export default function Dashboard() {
             card={editingCard}
             onClose={() => setEditingCard(null)} 
             onUpdateComplete={fetchCards} 
+        />
+      )}
+
+      {/* QR Code Modal */}
+      {showQRCode && (
+        <QRCodeGenerator 
+            card={showQRCode}
+            onClose={() => setShowQRCode(null)}
         />
       )}
 
