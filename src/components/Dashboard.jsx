@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import UploadScanner from './UploadScanner';
 import Auth from './Auth';
-import { Building2, Mail, Phone, MapPin, Globe, User, LogOut, Trash2, Plus, ScanLine, Search, LayoutGrid, Moon, Sun, X, Linkedin, Calendar, List, Tag } from 'lucide-react';
+import { Building2, Mail, Phone, MapPin, Globe, User, LogOut, Trash2, Plus, ScanLine, Search, LayoutGrid, Moon, Sun, X, Linkedin, Calendar, List, Tag, Download } from 'lucide-react';
 import ManualEntryForm from './ManualEntryForm';
 import EditCardForm from './EditCardForm';
 import ExportButton from './ExportButton';
@@ -22,7 +22,15 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState('grid');
   const [allTags, setAllTags] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
   const { theme, toggleTheme } = useTheme();
+
+  useEffect(() => {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    });
+  }, []);
 
   useEffect(() => {
     checkUser();
@@ -128,6 +136,15 @@ export default function Dashboard() {
     );
   });
 
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
@@ -160,6 +177,15 @@ export default function Dashboard() {
             </div>
             
             <div className="flex items-center gap-4 md:gap-6">
+              {deferredPrompt && (
+                <button
+                  onClick={handleInstallClick}
+                  className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-full hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 dark:shadow-blue-900/20 animate-pulse"
+                >
+                  <Download className="w-3 h-3" />
+                  Install App
+                </button>
+              )}
               <button
                 onClick={toggleTheme}
                 className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
