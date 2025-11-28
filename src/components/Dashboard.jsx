@@ -180,7 +180,7 @@ export default function Dashboard() {
               {deferredPrompt && (
                 <button
                   onClick={handleInstallClick}
-                  className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-full hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 dark:shadow-blue-900/20 animate-pulse"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-full hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 dark:shadow-blue-900/20 animate-pulse"
                 >
                   <Download className="w-3 h-3" />
                   Install App
