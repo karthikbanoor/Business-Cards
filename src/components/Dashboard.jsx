@@ -4,6 +4,7 @@ import UploadScanner from './UploadScanner';
 import Auth from './Auth';
 import { Building2, Mail, Phone, MapPin, Globe, User, LogOut, Trash2, Plus, ScanLine, Search, LayoutGrid, Moon, Sun, X } from 'lucide-react';
 import ManualEntryForm from './ManualEntryForm';
+import EditCardForm from './EditCardForm';
 import { useTheme } from '../context/ThemeContext';
 
 export default function Dashboard() {
@@ -14,6 +15,7 @@ export default function Dashboard() {
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
+  const [editingCard, setEditingCard] = useState(null);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -41,6 +43,7 @@ export default function Dashboard() {
       const { data, error } = await supabase
         .from('business_cards')
         .select('*')
+        .order('is_favorite', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -68,6 +71,29 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error deleting card:', error);
       alert('Failed to delete card');
+    }
+  };
+
+  const handleToggleFavorite = async (card) => {
+    try {
+      const { error } = await supabase
+        .from('business_cards')
+        .update({ is_favorite: !card.is_favorite })
+        .eq('id', card.id);
+
+      if (error) throw error;
+
+      setCards(cards.map(c => 
+        c.id === card.id ? { ...c, is_favorite: !c.is_favorite } : c
+      ).sort((a, b) => {
+        // Sort by favorite then date
+        if (a.is_favorite === b.is_favorite) {
+            return new Date(b.created_at) - new Date(a.created_at);
+        }
+        return b.is_favorite ? 1 : -1;
+      }));
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
     }
   };
 
@@ -220,6 +246,24 @@ export default function Dashboard() {
                           <Trash2 className="w-4 h-4" />
                         </button>
                     </div>
+
+                    {/* Favorite Button */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleFavorite(card);
+                        }}
+                        className={`absolute top-3 left-3 p-2 rounded-full backdrop-blur-sm transition-all duration-200 ${
+                            card.is_favorite 
+                                ? 'bg-yellow-400 text-white shadow-lg scale-110' 
+                                : 'bg-white/30 text-white hover:bg-white/50'
+                        }`}
+                        title={card.is_favorite ? "Unfavorite" : "Favorite"}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={card.is_favorite ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                        </svg>
+                    </button>
                   </div>
 
                   {/* Card Content */}
@@ -273,6 +317,23 @@ export default function Dashboard() {
                         </div>
                       )}
                     </div>
+                    
+                    {/* Notes & Actions */}
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex items-end justify-between gap-4">
+                        <div className="flex-1">
+                            {card.notes && (
+                                <p className="text-xs text-slate-500 dark:text-slate-400 italic line-clamp-2">
+                                    "{card.notes}"
+                                </p>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => setEditingCard(card)}
+                            className="px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg transition-colors"
+                        >
+                            Edit
+                        </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -304,6 +365,15 @@ export default function Dashboard() {
         <ManualEntryForm 
             onClose={() => setShowManualEntry(false)} 
             onSaveComplete={fetchCards} 
+        />
+      )}
+
+      {/* Edit Card Modal */}
+      {editingCard && (
+        <EditCardForm 
+            card={editingCard}
+            onClose={() => setEditingCard(null)} 
+            onUpdateComplete={fetchCards} 
         />
       )}
 
