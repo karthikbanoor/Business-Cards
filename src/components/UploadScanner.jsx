@@ -146,7 +146,6 @@ export default function UploadScanner({ onScanComplete }) {
             ref={fileInputRef} 
             className="hidden" 
             accept="image/*" 
-            capture="environment"
             onChange={handleFileChange}
           />
         </div>
