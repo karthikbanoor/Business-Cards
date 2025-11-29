@@ -7,10 +7,24 @@ import ManualEntryForm from './ManualEntryForm';
 import EditCardForm from './EditCardForm';
 import ExportButton from './ExportButton';
 import QRCodeGenerator from './QRCodeGenerator';
+import Sidebar from './Sidebar';
+import CreateFolderModal from './CreateFolderModal';
+import MoveCardModal from './MoveCardModal';
+import { FolderInput, Share2, Menu } from 'lucide-react'; // Added Share2 for later
+import ViewNoteModal from './ViewNoteModal';
 import { useTheme } from '../context/ThemeContext';
 
 export default function Dashboard() {
   const [cards, setCards] = useState([]);
+  const [folders, setFolders] = useState([]);
+  const [activeView, setActiveView] = useState('all'); // 'all' or 'folder'
+  const [selectedFolder, setSelectedFolder] = useState(null);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
+  const [movingCard, setMovingCard] = useState(null);
+  const [viewingNote, setViewingNote] = useState(null);
+  
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
@@ -39,6 +53,12 @@ export default function Dashboard() {
     checkUser();
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      fetchFolders();
+    }
+  }, [user]);
+
   const checkUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     setUser(user);
@@ -55,32 +75,81 @@ export default function Dashboard() {
     setCards([]);
   };
 
-  const fetchCards = async () => {
+  const fetchFolders = async () => {
     try {
       const { data, error } = await supabase
+        .from('folders')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+
+      // Deduplicate folders by name (case-insensitive)
+      const uniqueFolders = [];
+      const seenFolderNames = new Set();
+
+      (data || []).forEach(folder => {
+        const normalizedName = folder.name.toLowerCase().trim();
+        if (!seenFolderNames.has(normalizedName)) {
+          seenFolderNames.add(normalizedName);
+          uniqueFolders.push(folder);
+        }
+      });
+
+      setFolders(uniqueFolders);
+    } catch (error) {
+      console.error('Error fetching folders:', error);
+    }
+  };
+
+  const fetchCards = async () => {
+    try {
+      let query = supabase
         .from('business_cards')
         .select('*')
         .order('is_favorite', { ascending: false })
         .order('created_at', { ascending: false });
+
+      if (activeView === 'folder' && selectedFolder) {
+        query = query.eq('folder_id', selectedFolder.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
       setCards(data || []);
       
       // Extract unique tags
-      const tags = new Set();
+      // Extract unique tags (case-insensitive)
+      const tagsMap = new Map();
       (data || []).forEach(card => {
         if (card.tags && Array.isArray(card.tags)) {
-          card.tags.forEach(tag => tags.add(tag));
+          card.tags.forEach(tag => {
+            const normalizedTag = tag.toLowerCase().trim();
+            // Store the first variation found, or prefer Title Case if we wanted to be fancy
+            if (!tagsMap.has(normalizedTag)) {
+              // Capitalize first letter for display consistency
+              const displayTag = tag.charAt(0).toUpperCase() + tag.slice(1);
+              tagsMap.set(normalizedTag, displayTag);
+            }
+          });
         }
       });
-      setAllTags(Array.from(tags).sort());
+      setAllTags(Array.from(tagsMap.values()).sort());
     } catch (error) {
       console.error('Error fetching cards:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Refetch cards when view changes
+  useEffect(() => {
+    if (user) {
+      fetchCards();
+    }
+  }, [activeView, selectedFolder]);
 
   const handleDelete = async () => {
     if (!deleteConfirmation) return;
@@ -122,6 +191,20 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error toggling favorite:', error);
     }
+  };
+
+  const handleShareFolder = async () => {
+    if (!selectedFolder?.share_token) return;
+    const link = `${window.location.origin}/share/folder/${selectedFolder.share_token}`;
+    await navigator.clipboard.writeText(link);
+    alert('Folder link copied to clipboard!');
+  };
+
+  const handleShareCard = async (card) => {
+    if (!card.share_token) return;
+    const link = `${window.location.origin}/share/card/${card.share_token}`;
+    await navigator.clipboard.writeText(link);
+    alert('Card link copied to clipboard!');
   };
 
   const filteredCards = cards.filter(card => {
@@ -179,49 +262,128 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-white transition-colors duration-300">
-      {/* Glassmorphic Header */}
-      <header className="sticky top-0 z-40 w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            {/* Logo */}
-            <div className="flex items-center gap-2">
-              <div className="bg-blue-600 p-1.5 rounded-lg">
-                <ScanLine className="w-5 h-5 text-white" />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-white transition-colors duration-300 flex">
+      <Sidebar 
+        activeView={activeView}
+        setActiveView={setActiveView}
+        selectedFolder={selectedFolder}
+        setSelectedFolder={setSelectedFolder}
+        folders={folders}
+        setFolders={setFolders}
+        onCreateFolder={() => setShowCreateFolder(true)}
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        isDesktopOpen={isDesktopSidebarOpen}
+      />
+
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        {/* Glassmorphic Header */}
+        <header className="flex-none w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 shadow-sm z-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16 items-center">
+              {/* Title / Breadcrumbs */}
+              <div className="flex items-center gap-2">
+                <button
+                    onClick={() => {
+                      if (window.innerWidth < 768) {
+                        setIsMobileMenuOpen(true);
+                      } else {
+                        setIsDesktopSidebarOpen(!isDesktopSidebarOpen);
+                      }
+                    }}
+                    className="p-2 -ml-2 mr-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                    <Menu className="w-6 h-6" />
+                </button>
+                <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+                  {activeView === 'all' ? 'All Cards' : selectedFolder?.name}
+                </h1>
+                {activeView === 'folder' && selectedFolder && (
+                  <button
+                    onClick={handleShareFolder}
+                    className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                    title="Share Folder"
+                  >
+                    <Share2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400">
-                CardVault
-              </h1>
+
+              {/* Right Side Actions */}
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  title="Toggle Theme"
+                >
+                  {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                </button>
+
+                <div className="hidden md:flex flex-col items-end">
+                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{user.email}</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">Administrator</span>
+                </div>
+                <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 hidden md:block"></div>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Toolbar - Fixed Position */}
+        {/* Toolbar - Fixed Position */}
+        <div className="flex-none w-full bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-800/60 z-30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-semibold text-lg">
+              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                  <button 
+                      onClick={() => setViewMode('grid')}
+                      className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                      title="Grid View"
+                  >
+                      <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button 
+                      onClick={() => setViewMode('list')}
+                      className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                      title="List View"
+                  >
+                      <List className="w-4 h-4" />
+                  </button>
+              </div>
+              <span className="hidden sm:inline">My Cards</span> 
+              <span className="text-slate-400 dark:text-slate-500 font-normal text-sm">({filteredCards.length})</span>
             </div>
 
-            {/* Right Side Actions */}
-            <div className="flex items-center gap-4">
-              <button
-                onClick={toggleTheme}
-                className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                title="Toggle Theme"
-              >
-                {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
-
-              <div className="hidden md:flex flex-col items-end">
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{user.email}</span>
-                <span className="text-xs text-slate-400 dark:text-slate-500">Administrator</span>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-none group">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                <input 
+                  type="text" 
+                  placeholder="Search contacts..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full sm:w-64 pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 transition-all shadow-sm"
+                />
               </div>
-              <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 hidden md:block"></div>
               <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                onClick={() => setShowManualEntry(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 dark:bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-slate-800 dark:hover:bg-blue-700 transition-all shadow-lg shadow-slate-200 dark:shadow-blue-900/20 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
               >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Sign Out</span>
+                <Plus className="w-4 h-4" />
+                <span>Add New</span>
               </button>
             </div>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="flex-1 overflow-y-auto max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 w-full">
         
         {/* Hero Section / Scanner */}
         <section className="relative rounded-3xl overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm transition-colors duration-300">
@@ -237,49 +399,8 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Toolbar */}
-        <div className="sticky top-20 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm py-4 -mx-4 px-4 sm:mx-0 sm:px-0 flex flex-col sm:flex-row justify-between items-center gap-4 border-b border-slate-200/60 dark:border-slate-800/60 sm:border-none transition-colors duration-300">
-          <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-semibold text-lg">
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
-                <button 
-                    onClick={() => setViewMode('grid')}
-                    className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
-                    title="Grid View"
-                >
-                    <LayoutGrid className="w-4 h-4" />
-                </button>
-                <button 
-                    onClick={() => setViewMode('list')}
-                    className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
-                    title="List View"
-                >
-                    <List className="w-4 h-4" />
-                </button>
-            </div>
-            <span className="hidden sm:inline">My Cards</span> 
-            <span className="text-slate-400 dark:text-slate-500 font-normal text-sm">({filteredCards.length})</span>
-          </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 sm:flex-none group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-              <input 
-                type="text" 
-                placeholder="Search contacts..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full sm:w-64 pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 transition-all shadow-sm"
-              />
-            </div>
-            <button
-              onClick={() => setShowManualEntry(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 dark:bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-slate-800 dark:hover:bg-blue-700 transition-all shadow-lg shadow-slate-200 dark:shadow-blue-900/20 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add New</span>
-            </button>
-          </div>
-        </div>
+
 
         {/* Tags Filter */}
         {allTags.length > 0 && (
@@ -492,16 +613,21 @@ export default function Dashboard() {
                     </div>
                     
                     {/* Notes & Actions */}
-                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex items-end justify-between gap-4">
-                        <div className="flex-1">
-                            {card.notes && (
-                                <p className="text-xs text-slate-500 dark:text-slate-400 italic line-clamp-2">
+                    {/* Notes & Actions */}
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex flex-col gap-3">
+                        {card.notes && (
+                            <div 
+                                onClick={() => setViewingNote(card.notes)}
+                                className="w-full bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-700/50 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group/note"
+                                title="Click to view full note"
+                            >
+                                <p className="text-xs text-slate-500 dark:text-slate-400 italic line-clamp-3 group-hover/note:text-slate-700 dark:group-hover/note:text-slate-300">
                                     "{card.notes}"
                                 </p>
-                            )}
-                        </div>
-                        <div className="flex gap-2">
-                            <a
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-2 w-full">
+                            {/* <a
                                 href={`https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(`${data.Name} ${data["Company Name"] || ''}`)}`}
                                 target="_blank"
                                 rel="noreferrer"
@@ -509,7 +635,7 @@ export default function Dashboard() {
                                 title="Search on LinkedIn"
                             >
                                 <Linkedin className="w-4 h-4" />
-                            </a>
+                            </a> */}
                             <a
                                 href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=Meeting with ${encodeURIComponent(data.Name)}&details=Follow up with ${encodeURIComponent(data.Name)} from ${encodeURIComponent(data["Company Name"] || '')}`}
                                 target="_blank"
@@ -520,6 +646,20 @@ export default function Dashboard() {
                                 <Calendar className="w-4 h-4" />
                             </a>
                             <ExportButton card={card} />
+                            <button
+                                onClick={() => setMovingCard(card)}
+                                className="p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                title="Move to Folder"
+                            >
+                                <FolderInput className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handleShareCard(card)}
+                                className="p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                title="Share Card"
+                            >
+                                <Share2 className="w-4 h-4" />
+                            </button>
                             <button
                                 onClick={() => setEditingCard(card)}
                                 className="px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg transition-colors"
@@ -652,6 +792,35 @@ export default function Dashboard() {
           />
         </div>
       )}
+      {/* Create Folder Modal */}
+      {showCreateFolder && (
+        <CreateFolderModal
+          onClose={() => setShowCreateFolder(false)}
+          onCreateComplete={fetchFolders}
+        />
+      )}
+      
+      {/* Move Card Modal */}
+      {movingCard && (
+        <MoveCardModal
+          card={movingCard}
+          folders={folders}
+          onClose={() => setMovingCard(null)}
+          onMoveComplete={() => {
+            fetchCards();
+            setMovingCard(null);
+          }}
+        />
+      )}
+
+      {/* View Note Modal */}
+      {viewingNote && (
+        <ViewNoteModal
+          note={viewingNote}
+          onClose={() => setViewingNote(null)}
+        />
+      )}
+    </div>
     </div>
   );
 }
