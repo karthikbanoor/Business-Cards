@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import UploadScanner from './UploadScanner';
 import Auth from './Auth';
-import { Building2, Mail, Phone, MapPin, Globe, User, LogOut, Trash2, Plus, ScanLine, Search, LayoutGrid, Moon, Sun, X, Linkedin, Calendar, List, Tag, Download } from 'lucide-react';
+import { Building2, Mail, Phone, MapPin, Globe, User, LogOut, Trash2, Plus, ScanLine, Search, LayoutGrid, Moon, Sun, X, Linkedin, Calendar, List, Tag, Download, ChevronDown } from 'lucide-react';
 import ManualEntryForm from './ManualEntryForm';
 import EditCardForm from './EditCardForm';
 import ExportButton from './ExportButton';
@@ -36,6 +36,11 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState('grid');
   const [allTags, setAllTags] = useState([]);
   const [selectedTag, setSelectedTag] = useState(null);
+  
+  // Tag Dropdown State
+  const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
+  const [tagSearchTerm, setTagSearchTerm] = useState('');
+  const [tempSelectedTag, setTempSelectedTag] = useState(null);
 
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -122,21 +127,36 @@ export default function Dashboard() {
       
       // Extract unique tags
       // Extract unique tags (case-insensitive)
-      const tagsMap = new Map();
+      // Extract unique tags and sort by recency (newest card first)
+      const tagsMap = new Map(); // normalizedTag -> { displayTag, lastUsed }
+      
       (data || []).forEach(card => {
         if (card.tags && Array.isArray(card.tags)) {
           card.tags.forEach(tag => {
             const normalizedTag = tag.toLowerCase().trim();
-            // Store the first variation found, or prefer Title Case if we wanted to be fancy
+            const cardDate = new Date(card.created_at).getTime();
+
             if (!tagsMap.has(normalizedTag)) {
               // Capitalize first letter for display consistency
               const displayTag = tag.charAt(0).toUpperCase() + tag.slice(1);
-              tagsMap.set(normalizedTag, displayTag);
+              tagsMap.set(normalizedTag, { displayTag, lastUsed: cardDate });
+            } else {
+              // Update lastUsed if this card is newer
+              const current = tagsMap.get(normalizedTag);
+              if (cardDate > current.lastUsed) {
+                current.lastUsed = cardDate;
+              }
             }
           });
         }
       });
-      setAllTags(Array.from(tagsMap.values()).sort());
+
+      // Sort by lastUsed (descending)
+      const sortedTags = Array.from(tagsMap.values())
+        .sort((a, b) => b.lastUsed - a.lastUsed)
+        .map(item => item.displayTag);
+
+      setAllTags(sortedTags);
     } catch (error) {
       console.error('Error fetching cards:', error);
     } finally {
@@ -195,21 +215,24 @@ export default function Dashboard() {
 
   const handleShareFolder = async () => {
     if (!selectedFolder?.share_token) return;
-    const link = `${window.location.origin}/share/folder/${selectedFolder.share_token}`;
+    // Construct link using the base URL to support subpath deployment (e.g. GitHub Pages)
+    const baseUrl = window.location.origin + import.meta.env.BASE_URL;
+    const link = `${baseUrl}share/folder/${selectedFolder.share_token}`;
     await navigator.clipboard.writeText(link);
     alert('Folder link copied to clipboard!');
   };
 
   const handleShareCard = async (card) => {
     if (!card.share_token) return;
-    const link = `${window.location.origin}/share/card/${card.share_token}`;
+    const baseUrl = window.location.origin + import.meta.env.BASE_URL;
+    const link = `${baseUrl}share/card/${card.share_token}`;
     await navigator.clipboard.writeText(link);
     alert('Card link copied to clipboard!');
   };
 
   const filteredCards = cards.filter(card => {
     if (selectedTag) {
-        if (!card.tags || !card.tags.includes(selectedTag)) return false;
+        if (!card.tags || !card.tags.some(tag => tag.toLowerCase() === selectedTag.toLowerCase())) return false;
     }
 
     const data = card.extracted_data;
@@ -402,9 +425,10 @@ export default function Dashboard() {
 
 
 
-        {/* Tags Filter */}
+        {/* Tags Filter - Optimized */}
         {allTags.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">
+            <div className="flex flex-wrap items-center gap-2 pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
+                {/* "All" Button */}
                 <button
                     onClick={() => setSelectedTag(null)}
                     className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors border ${
@@ -415,7 +439,9 @@ export default function Dashboard() {
                 >
                     All
                 </button>
-                {allTags.map(tag => (
+
+                {/* Top 5 Recent Tags */}
+                {allTags.slice(0, 5).map(tag => (
                     <button
                         key={tag}
                         onClick={() => setSelectedTag(tag)}
@@ -428,6 +454,87 @@ export default function Dashboard() {
                         {tag}
                     </button>
                 ))}
+
+                {/* "More Filters" Dropdown */}
+                {allTags.length > 5 && (
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setIsTagDropdownOpen(!isTagDropdownOpen);
+                        setTempSelectedTag(selectedTag); // Initialize temp selection
+                        setTagSearchTerm('');
+                      }}
+                      className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-colors border flex items-center gap-1 ${
+                        isTagDropdownOpen || (selectedTag && !allTags.slice(0, 5).includes(selectedTag))
+                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500'
+                      }`}
+                    >
+                      More Filters
+                      <ChevronDown className={`w-3 h-3 transition-transform ${isTagDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* Dropdown Content */}
+                    {isTagDropdownOpen && (
+                      <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                        {/* Search Header */}
+                        <div className="p-3 border-b border-slate-100 dark:border-slate-700">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Search tags..."
+                              value={tagSearchTerm}
+                              onChange={(e) => setTagSearchTerm(e.target.value)}
+                              className="w-full pl-8 pr-3 py-1.5 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+
+                        {/* Tag List */}
+                        <div className="max-h-48 overflow-y-auto p-2 space-y-1">
+                          {allTags.slice(5).filter(tag => tag.toLowerCase().includes(tagSearchTerm.toLowerCase())).map(tag => (
+                            <button
+                              key={tag}
+                              onClick={() => setTempSelectedTag(tag)}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${
+                                tempSelectedTag === tag
+                                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              {tag}
+                              {tempSelectedTag === tag && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                            </button>
+                          ))}
+                          {allTags.slice(5).filter(tag => tag.toLowerCase().includes(tagSearchTerm.toLowerCase())).length === 0 && (
+                            <p className="text-center text-xs text-slate-400 py-4">No tags found</p>
+                          )}
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="p-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2">
+                          <button
+                            onClick={() => setIsTagDropdownOpen(false)}
+                            className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedTag(tempSelectedTag);
+                              setIsTagDropdownOpen(false);
+                            }}
+                            className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                          >
+                            Apply Filter
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
             </div>
         )}
 
