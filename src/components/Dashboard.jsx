@@ -12,6 +12,7 @@ import CreateFolderModal from './CreateFolderModal';
 import MoveCardModal from './MoveCardModal';
 import { FolderInput, Share2, Menu } from 'lucide-react'; // Added Share2 for later
 import ViewNoteModal from './ViewNoteModal';
+import IOSInstallModal from './IOSInstallModal';
 import { useTheme } from '../context/ThemeContext';
 
 export default function Dashboard() {
@@ -43,6 +44,9 @@ export default function Dashboard() {
   const [tempSelectedTag, setTempSelectedTag] = useState(null);
 
   const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [showIOSInstallModal, setShowIOSInstallModal] = useState(false);
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
   const { theme, toggleTheme } = useTheme();
@@ -52,6 +56,10 @@ export default function Dashboard() {
       e.preventDefault();
       setDeferredPrompt(e);
     });
+
+    // Detect iOS
+    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    setIsIOS(isIOSDevice);
   }, []);
 
   useEffect(() => {
@@ -261,6 +269,11 @@ export default function Dashboard() {
   };
 
   const handleInstallClick = async () => {
+    if (isIOS) {
+      setShowIOSInstallModal(true);
+      return;
+    }
+
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
@@ -299,6 +312,11 @@ export default function Dashboard() {
         isDesktopOpen={isDesktopSidebarOpen}
       />
 
+      <IOSInstallModal 
+        isOpen={showIOSInstallModal} 
+        onClose={() => setShowIOSInstallModal(false)} 
+      />
+
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         {/* Glassmorphic Header */}
         <header className="flex-none w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 shadow-sm z-40">
@@ -334,7 +352,7 @@ export default function Dashboard() {
 
               {/* Right Side Actions */}
               <div className="flex items-center gap-4">
-                {deferredPrompt && (
+                {(deferredPrompt || isIOS) && (
                   <button
                     onClick={handleInstallClick}
                     className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
