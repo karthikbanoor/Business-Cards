@@ -334,6 +334,15 @@ export default function Dashboard() {
 
               {/* Right Side Actions */}
               <div className="flex items-center gap-4">
+                {deferredPrompt && (
+                  <button
+                    onClick={handleInstallClick}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Install App</span>
+                  </button>
+                )}
                 <button
                   onClick={toggleTheme}
                   className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
